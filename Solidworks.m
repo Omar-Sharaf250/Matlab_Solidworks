@@ -5,6 +5,7 @@ classdef Solidworks < handle
         Active_Doc_Sim
         Active_Study
         Active_Study_idx
+        Rebuild_Flag
         RootFolder
         BridgeFolder
         TemplateFolder
@@ -50,6 +51,7 @@ classdef Solidworks < handle
             else
                 set(obj.App,'Visible',false);
             end
+            invoke(obj.App, 'SetUserPreferenceIntegerValue', 73, 2);
             try
                 swExePath = invoke(obj.App, 'GetExecutablePath');
                 obj.simPath = fullfile(swExePath, 'Simulation', 'cosworks.dll');
@@ -111,7 +113,10 @@ classdef Solidworks < handle
                 fprintf('Success: Loaded -> %s\n', filePath);
             end
         end
-        function ChangeParameters(obj,ParamNames,ParamValues)
+        function rebuild_success = ChangeParameters(obj,ParamNames,ParamValues, return_old_values_if_failed)
+            if nargin < 4 || isempty(axisComp)
+                return_old_values_if_failed = 0;
+            end
             ParamNames = cellstr(ParamNames);
             if ~(length(ParamNames) == length(ParamValues))
                 fprintf("Provide all parameter names/values please")
@@ -124,12 +129,16 @@ classdef Solidworks < handle
                 set(Param, 'SystemValue', ParamValues(i));
             end
             rebuild_success = invoke(obj.Active_Doc, 'EditRebuild3');
-
+            obj.Rebuild_Flag = rebuild_success;
             if rebuild_success
                 fprintf("Rebuild succeeded\n")
                 return
             else
-                obj.ChangeParameters(ParamNames,OldValues)
+                if return_old_values_if_failed
+                    fprintf("Rebuild failed geometry can't be satisfied\n")
+                    fprintf("Returning old params...\n")
+                    obj.ChangeParameters(ParamNames,OldValues)
+                end
                 fprintf("Rebuild failed geometry can't be satisfied\n")
             end
         end
@@ -140,7 +149,11 @@ classdef Solidworks < handle
         function maxResult = GET_MINMAX_DISPLACEMENT(obj, axisComp)
             % GET_MINMAX_DISPLACEMENT: Fetch max displacement.
             % Defaults to "RES" (Resultant) if no axis is provided.
-
+            cwResult = get(obj.Active_Study, 'Results');
+            if (isempty(cwResult) || ~obj.Rebuild_Flag)
+                maxResult = NaN;
+                return; % The object doesn't exist! Abort the iteration before Error -91 happens!
+            end
             if nargin < 2 || isempty(axisComp)
                 axisComp = 'RES';
             end
@@ -167,7 +180,7 @@ classdef Solidworks < handle
             obj.RunBridge();
 
             % 4. Wait slightly and read the output file
-            pause(0.15);
+            pause(5/1000);
             if exist(resFile, 'file')
                 fid = fopen(resFile, 'r');
                 maxResult = fscanf(fid, '%f');
@@ -180,7 +193,11 @@ classdef Solidworks < handle
         function maxResult = GET_MINMAX_STRESS(obj, axisComp)
             % GET_MINMAX_STRESS: Fetch max stress.
             % Defaults to "VON" (von Mises) if no axis is provided.
-
+            cwResult = get(obj.Active_Study, 'Results');
+            if (isempty(cwResult) || ~obj.Rebuild_Flag)
+                maxResult = NaN;
+                return; % The object doesn't exist! Abort the iteration before Error -91 happens!
+            end
             if nargin < 2 || isempty(axisComp)
                 axisComp = 'VON';
             end
@@ -207,7 +224,7 @@ classdef Solidworks < handle
             obj.RunBridge();
 
             % 4. Wait slightly and read the output file
-            pause(0.15);
+            pause(5/1000);
             if exist(resFile, 'file')
                 fid = fopen(resFile, 'r');
                 maxResult = fscanf(fid, '%f');
