@@ -23,6 +23,10 @@
 % \%example/%file.svn
 %
 **/resources/project/**/*
+Bridge/Command.txt
+Bridge/result.txt
+.gitignore
+.gitattributes
 resources
 **/*.prj
 **/*.prj.bak
