@@ -25,7 +25,6 @@ classdef Solidworks < handle
         end
         function LoadSimulation(obj)
             invoke(obj.App, 'LoadAddIn', obj.simPath);
-            pause(3);
             disp('Simulation Add-in Loaded!');
         end
         function Select(obj,name,type)
@@ -45,7 +44,13 @@ classdef Solidworks < handle
     methods
         function obj = Solidworks(Visible)
             % 1. Start Solidworks Server
-            obj.App = actxserver('SldWorks.Application');
+            try
+                obj.App = actxGetRunningServer('SldWorks.Application');
+                fprintf('Connected to existing running SolidWorks session.\n');
+            catch
+                obj.App = actxserver('SldWorks.Application');
+                fprintf('Launched a clean, new SolidWorks session.\n');
+            end
             if Visible
                 set(obj.App,'Visible',true);
             else
@@ -61,17 +66,19 @@ classdef Solidworks < handle
                 obj.simPath = 'C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\Simulation\cosworks.dll';
                 warning('Could not query SolidWorks for path. Falling back to default C: drive installation.');
             end
-
-            % 2. Resolve relative Bridge Folders
+            obj.SimApp = invoke(obj.App, 'GetAddInObject', 'SldWorks.Simulation');
+            if isempty(obj.SimApp)
+                fprintf('Loading Simulation Add-in\n');
+                obj.LoadSimulation(); % Now this actually has a path to use!
+                obj.SimApp = invoke(obj.App, 'GetAddInObject', 'SldWorks.Simulation');
+            else
+                fprintf('Simulation Add-in is already loaded.\n');
+            end
             classFolder = (mfilename('fullpath'));
             obj.RootFolder = fileparts(classFolder);
             obj.BridgeFolder = fullfile(obj.RootFolder,...
                 "Bridge");
             obj.TemplateFolder = fullfile(obj.BridgeFolder,"templates");
-
-            % 3. Load Simulation using the newly resolved dynamic path
-            obj.LoadSimulation()
-            obj.SimApp = invoke(obj.App, 'GetAddInObject', 'SldWorks.Simulation');
             obj.CosmosEngine = get(obj.SimApp, 'CosmosWorks');
         end
         function  SelectStudy(obj, studyName)
